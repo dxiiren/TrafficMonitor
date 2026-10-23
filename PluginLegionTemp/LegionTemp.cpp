@@ -21,6 +21,7 @@
 
 namespace {
 
+
 constexpr unsigned CPU_TEMP_ID = 0x05040000;
 constexpr unsigned GPU_TEMP_ID = 0x05050000;
 
@@ -182,15 +183,26 @@ public:
     {
         return m_kind == Kind::Temp ? legion::TempLevel(m_value) : legion::UsageLevel(m_value);
     }
-    bool DrawItemEx(IPluginDrawer* d, int x, int y, int w, int h, bool dark_mode) override
+    // Drawn with plain GDI on the DC the host hands over: works with TrafficMonitor 1.8.x (no DrawItemEx) and newer
+    // (which calls DrawItem too, so DrawItemEx is deliberately not implemented: it would draw twice).
+    void DrawItem(void* hDC, int x, int y, int w, int h, bool dark_mode) override
     {
-        unsigned long normal = g_hostColorKnown ? g_hostColor : (dark_mode ? legion::Rgb(255, 255, 255) : legion::Rgb(0, 0, 0));
+        HDC dc = static_cast<HDC>(hDC);
+        if (!dc) return;
+        unsigned long normal = g_hostColorKnown ? g_hostColor : (unsigned long)GetTextColor(dc);
         unsigned long vcol = legion::LevelColor(Level(), dark_mode, normal);
-        int lw = 0, lh = 0;
-        d->GetTextExtent(m_label, lw, lh);
-        d->DrawWindowText(x, y, lw + 2, h, m_label, normal, IPluginDrawer::LEFT);
-        d->DrawWindowText(x + lw, y, w - lw, h, m_text.c_str(), vcol, IPluginDrawer::RIGHT);
-        return true;
+        int oldBk = SetBkMode(dc, TRANSPARENT);
+        COLORREF oldCol = GetTextColor(dc);
+        SIZE sz{};
+        GetTextExtentPoint32W(dc, m_label, (int)wcslen(m_label), &sz);
+        RECT rl{ x, y, x + sz.cx + 2, y + h };
+        SetTextColor(dc, normal);
+        DrawTextW(dc, m_label, -1, &rl, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+        RECT rv{ x + sz.cx, y, x + w, y + h };
+        SetTextColor(dc, vcol);
+        DrawTextW(dc, m_text.c_str(), -1, &rv, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+        SetTextColor(dc, oldCol);
+        SetBkMode(dc, oldBk);
     }
 private:
     const wchar_t* m_name; const wchar_t* m_id; const wchar_t* m_label;

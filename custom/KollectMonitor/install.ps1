@@ -6,6 +6,10 @@ param(
   [string]$Log,
   [switch]$TestShowDesktop
 )
+# one instance only; no self-elevation here: the caller starts this script elevated
+$created = $false
+$mx = New-Object Threading.Mutex($true, 'Global\KollectMonitorInstall', [ref]$created)
+if (-not $created) { 'another install is already running, exiting'; exit 0 }
 if ($Log) { Start-Transcript $Log -Force | Out-Null }
 $exe = Join-Path $ExeDir 'TrafficMonitor.exe'
 Get-Process TrafficMonitor -ea 0 | Stop-Process -Force
