@@ -1,0 +1,54 @@
+<root>
+	<plugin_map>
+		<lt_cpu>LegionTemp.cpu_usage</lt_cpu>
+		<lt_mem>LegionTemp.mem</lt_mem>
+		<lt_gpu>LegionTemp.gpu_usage</lt_gpu>
+		<lt_temp>LegionTemp.cpu</lt_temp>
+	</plugin_map>
+	<skin>
+		<text_color>16777215</text_color>
+		<specify_each_item_color>0</specify_each_item_color>
+		<skin_author>Kollect</skin_author>
+		<font name="Segoe UI" size="9" style="0"/>
+		<display_text>
+			<lt_cpu>CPU </lt_cpu>
+			<lt_mem>MEM </lt_mem>
+			<lt_gpu>GPU </lt_gpu>
+			<lt_temp>TMP </lt_temp>
+		</display_text>
+	</skin>
+	<layout text_height="18" no_label="0">
+		<layout_l width="292" height="22">
+			<lt_cpu x="4" y="1" width="68" align="0" show="1"/>
+			<lt_mem x="76" y="1" width="70" align="0" show="1"/>
+			<lt_gpu x="150" y="1" width="66" align="0" show="1"/>
+			<lt_temp x="220" y="1" width="68" align="0" show="1"/>
+			<cpu x="0" y="0" width="0" align="0" show="0"/>
+			<memory x="0" y="0" width="0" align="0" show="0"/>
+			<gpu x="0" y="0" width="0" align="0" show="0"/>
+			<cpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<gpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<up x="0" y="0" width="0" align="0" show="0"/>
+			<down x="0" y="0" width="0" align="0" show="0"/>
+			<hdd_temperature x="0" y="0" width="0" align="0" show="0"/>
+		</layout_l>
+		<layout_s width="292" height="22">
+			<lt_cpu x="4" y="1" width="68" align="0" show="1"/>
+			<lt_mem x="76" y="1" width="70" align="0" show="1"/>
+			<lt_gpu x="150" y="1" width="66" align="0" show="1"/>
+			<lt_temp x="220" y="1" width="68" align="0" show="1"/>
+			<cpu x="0" y="0" width="0" align="0" show="0"/>
+			<memory x="0" y="0" width="0" align="0" show="0"/>
+			<gpu x="0" y="0" width="0" align="0" show="0"/>
+			<cpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<gpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<up x="0" y="0" width="0" align="0" show="0"/>
+			<down x="0" y="0" width="0" align="0" show="0"/>
+			<hdd_temperature x="0" y="0" width="0" align="0" show="0"/>
+		</layout_s>
+	</layout>
+	<preview width="302" height="32">
+		<l x="0" y="0"/>
+		<s x="0" y="0"/>
+	</preview>
+</root>
