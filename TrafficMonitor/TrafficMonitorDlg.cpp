@@ -135,6 +135,7 @@ BEGIN_MESSAGE_MAP(CTrafficMonitorDlg, CDialog)
     ON_WM_LBUTTONUP()
     ON_WM_NCHITTEST()
     ON_WM_NCLBUTTONDOWN()
+    ON_WM_NCRBUTTONUP()
     ON_WM_CAPTURECHANGED()
     ON_COMMAND_RANGE(ID_WINDOW_SCALE_FIRST, ID_WINDOW_SCALE_LAST, &CTrafficMonitorDlg::OnWindowScaleCommand)
     ON_COMMAND(ID_REFRESH_CONNECTION_LIST, &CTrafficMonitorDlg::OnRefreshConnectionList)
@@ -1015,7 +1016,7 @@ LRESULT CTrafficMonitorDlg::OnNcHitTest(CPoint point)
         GetWindowRect(rect);
         if (rect.PtInRect(point))
         {
-            const int border = max(4, theApp.DPI(5));
+            const int border = min(max(4, theApp.DPI(5)), 6);    //最多6像素，保证窗口中间仍是客户区（右键菜单、拖动）
             bool l = point.x < rect.left + border, r = point.x >= rect.right - border;
             bool t = point.y < rect.top + border, b = point.y >= rect.bottom - border;
             if (t && l) return HTTOPLEFT;
@@ -1049,6 +1050,23 @@ void CTrafficMonitorDlg::OnNcLButtonDown(UINT nHitTest, CPoint point)
         return;     //不允许缩放时（已锁定）也不交给系统处理，避免进入系统的缩放循环
     }
     CDialog::OnNcLButtonDown(nHitTest, point);
+}
+
+void CTrafficMonitorDlg::OnNcRButtonUp(UINT nHitTest, CPoint point)
+{
+    //右键点在缩放边框上时，同样弹出右键菜单
+    switch (nHitTest)
+    {
+    case HTLEFT: case HTRIGHT: case HTTOP: case HTBOTTOM:
+    case HTTOPLEFT: case HTTOPRIGHT: case HTBOTTOMLEFT: case HTBOTTOMRIGHT:
+    {
+        CPoint client{ point };
+        ScreenToClient(&client);
+        OnRButtonUp(0, client);
+        return;
+    }
+    }
+    CDialog::OnNcRButtonUp(nHitTest, point);
 }
 
 void CTrafficMonitorDlg::OnCaptureChanged(CWnd* pWnd)
