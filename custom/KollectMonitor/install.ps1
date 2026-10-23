@@ -3,7 +3,8 @@
 param(
   [string]$ExeDir = (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\zhongyang219.TrafficMonitor.Full_Microsoft.Winget.Source_8wekyb3d8bbwe\TrafficMonitor'),
   [string]$Dll = (Join-Path $PSScriptRoot '..\..\PluginLegionTemp\LegionTemp.dll'),
-  [string]$Log
+  [string]$Log,
+  [switch]$TestShowDesktop
 )
 if ($Log) { Start-Transcript $Log -Force | Out-Null }
 $exe = Join-Path $ExeDir 'TrafficMonitor.exe'
@@ -16,12 +17,27 @@ Copy-Item (Join-Path $PSScriptRoot 'skin.xml'), (Join-Path $PSScriptRoot 'backgr
 "plugin installed: " + (Get-Item (Join-Path $ExeDir 'plugins\LegionTemp.dll')).Length + " bytes"
 "skin plugin_map: " + (Select-String -Path (Join-Path $ExeDir 'skins\KollectMonitor\skin.xml') -Pattern 'LegionTemp.cpu' | Select -First 1).Line.Trim()
 $p = Join-Path $env:APPDATA 'TrafficMonitor\config.ini'
-$set = @{}
-foreach ($l in Get-Content (Join-Path $PSScriptRoot 'config.sample.ini')) { $m=[regex]::Match($l,'^(\w+)\s*=\s*(.*)$'); if ($m.Success) { $set[$m.Groups[1].Value] = $m.Groups[2].Value } }
-$raw = [IO.File]::ReadAllText($p, [Text.Encoding]::UTF8)
-$out = foreach ($l in ($raw -split "`r?`n")) { $m=[regex]::Match($l,'^(\w+)\s*=\s*(.*)$'); if ($m.Success -and $set.ContainsKey($m.Groups[1].Value)) { "$($m.Groups[1].Value) = $($set[$m.Groups[1].Value])" } else { $l } }
-[IO.File]::WriteAllText($p, ($out -join "`r`n"), (New-Object Text.UTF8Encoding($true)))
-Get-Content $p | Select-String 'hardware_monitor_item|tbar_display_item|plugin_display_item|skin_selected|show_task_bar_wnd|hide_main_window'
+Copy-Item $p "$p.bak-$(Get-Date -f HHmmss)" -Force
+# sample file: [section] + key = value. Keys are set inside their section; missing keys/sections are appended.
+$want = [ordered]@{}; $sec = ''
+foreach ($l in Get-Content (Join-Path $PSScriptRoot 'config.sample.ini') -Encoding UTF8) {
+  if ($l -match '^\[(.+)\]') { $sec = $Matches[1]; $want[$sec] = [ordered]@{}; continue }
+  if ($l -match '^(\w+)\s*=\s*(.*)$' -and $sec) { $want[$sec][$Matches[1]] = $Matches[2] }
+}
+$lines = [Collections.Generic.List[string]]((([IO.File]::ReadAllText($p, [Text.Encoding]::UTF8)) -replace '^﻿','') -split "`r?`n")
+foreach ($s in $want.Keys) {
+  $start = $lines.FindIndex({ param($x) $x -eq "[$s]" })
+  if ($start -lt 0) { $lines.Add("[$s]"); $start = $lines.Count - 1 }
+  foreach ($k in $want[$s].Keys) {
+    $end = $lines.Count
+    for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^\[') { $end = $i; break } }
+    $hit = -1
+    for ($i = $start + 1; $i -lt $end; $i++) { if ($lines[$i] -match "^$k\s*=") { $hit = $i; break } }
+    if ($hit -ge 0) { $lines[$hit] = "$k = $($want[$s][$k])" } else { $lines.Insert($end, "$k = $($want[$s][$k])") }
+  }
+}
+[IO.File]::WriteAllText($p, ($lines -join "`r`n"), (New-Object Text.UTF8Encoding($true)))
+Get-Content $p | Select-String 'hardware_monitor_item|tbar_display_item|plugin_display_item|skin_selected|show_task_bar_wnd|hide_main_window|always_on_top|lock_window_pos'
 # autostart elevated at logon, without a UAC prompt
 $user = "$env:USERDOMAIN\$env:USERNAME"
 Unregister-ScheduledTask -TaskName TrafficMonitorAutoRun -Confirm:$false -ea 0
@@ -33,4 +49,14 @@ Register-ScheduledTask -TaskName TrafficMonitorAutoRun -Action $a -Trigger $t -P
 Start-ScheduledTask -TaskName TrafficMonitorAutoRun
 Start-Sleep 8
 Get-Process TrafficMonitor | Format-Table Id, StartTime
+if ($TestShowDesktop) {
+  # show desktop twice via COM (no keystrokes); TrafficMonitor windows should stay visible
+  Add-Type -Namespace W -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern bool IsWindowVisible(System.IntPtr h);'
+  $h = (Get-Process TrafficMonitor | Select-Object -First 1).MainWindowHandle
+  $sh = New-Object -ComObject Shell.Application
+  "before ToggleDesktop: visible=" + [W.U]::IsWindowVisible($h)
+  $sh.ToggleDesktop(); Start-Sleep 2
+  "after ToggleDesktop: visible=" + [W.U]::IsWindowVisible($h)
+  $sh.ToggleDesktop(); Start-Sleep 1
+}
 if ($Log) { Stop-Transcript | Out-Null }

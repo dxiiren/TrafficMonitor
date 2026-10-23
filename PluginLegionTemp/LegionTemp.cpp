@@ -1,4 +1,4 @@
-// LegionTemp - TrafficMonitor plugin: Lenovo Legion embedded-controller temperatures.
+// LegionTemp - TrafficMonitor plugin: Lenovo Legion EC temperatures + colour-coded CPU/MEM/GPU usage.
 // Source of the numbers: WMI root\WMI, class LENOVO_OTHER_METHOD, method GetFeatureValue(IDs, value).
 // IDs (from LenovoLegionToolkit Enums.cs): CpuCurrentTemperature = 0x05040000, GpuCurrentTemperature = 0x05050000.
 // The WMI provider needs administrator rights; TrafficMonitor must run elevated.
@@ -9,11 +9,15 @@
 #include <Wbemidl.h>
 #include <atomic>
 #include <string>
+#include <cwchar>
+#include <cstdlib>
 #include "PluginInterface.h"
+#include "Thresholds.h"
 
 #pragma comment(lib, "wbemuuid.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "oleaut32.lib")
+#pragma comment(lib, "gdi32.lib")
 
 namespace {
 
@@ -22,6 +26,9 @@ constexpr unsigned GPU_TEMP_ID = 0x05050000;
 
 std::atomic<int> g_cpu{-1};
 std::atomic<int> g_gpu{-1};
+std::atomic<int> g_cpuUse{-1};
+std::atomic<int> g_mem{-1};
+std::atomic<int> g_gpuUse{-1};
 std::atomic<bool> g_stop{false};
 HANDLE g_thread = nullptr;
 
@@ -133,6 +140,67 @@ void EnsureWorker()
         g_thread = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
 }
 
+// Normal text colour of the window being drawn, as reported by the host (EI_VALUE_TEXT_COLOR, 0x00BBGGRR).
+unsigned long g_hostColor = 0;
+bool g_hostColorKnown = false;
+
+enum class Kind { Usage, Temp };
+
+// A custom-drawn item: "LABEL: value", value coloured by status. Drawn with the host drawer, so font and DPI match.
+class StatusItem : public IPluginItem
+{
+public:
+    StatusItem(const wchar_t* name, const wchar_t* id, const wchar_t* label, Kind kind, std::atomic<int>& src)
+        : m_name(name), m_id(id), m_label(label), m_kind(kind), m_src(src) {}
+    const wchar_t* GetItemName() const override { return m_name; }
+    const wchar_t* GetItemId() const override { return m_id; }
+    const wchar_t* GetItemLableText() const override { return m_label; }
+    const wchar_t* GetItemValueText() const override { return m_text.c_str(); }
+    const wchar_t* GetItemValueSampleText() const override { return m_kind == Kind::Temp ? L"100 \u00B0C" : L"100%"; }
+    bool IsCustomDraw() const override { return true; }
+    int GetItemWidth() const override { return 100; }
+    int GetItemWidthEx(void* hDC) const override
+    {
+        SIZE a{}, b{};
+        std::wstring sample = GetItemValueSampleText();
+        if (!hDC || !GetTextExtentPoint32W(static_cast<HDC>(hDC), m_label, (int)wcslen(m_label), &a)
+                 || !GetTextExtentPoint32W(static_cast<HDC>(hDC), sample.c_str(), (int)sample.size(), &b))
+            return 0; // host falls back to GetItemWidth()
+        return a.cx + b.cx + 6;
+    }
+    void Refresh()
+    {
+        m_value = m_src.load();
+        if (m_value <= 0 && m_kind == Kind::Temp)
+            m_text = L"--";
+        else if (m_value < 0)
+            m_text = L"--";
+        else
+            m_text = m_kind == Kind::Temp ? std::to_wstring(m_value) + L" \u00B0C" : std::to_wstring(m_value) + L"%";
+    }
+    legion::Level Level() const
+    {
+        return m_kind == Kind::Temp ? legion::TempLevel(m_value) : legion::UsageLevel(m_value);
+    }
+    bool DrawItemEx(IPluginDrawer* d, int x, int y, int w, int h, bool dark_mode) override
+    {
+        unsigned long normal = g_hostColorKnown ? g_hostColor : (dark_mode ? legion::Rgb(255, 255, 255) : legion::Rgb(0, 0, 0));
+        unsigned long vcol = legion::LevelColor(Level(), dark_mode, normal);
+        int lw = 0, lh = 0;
+        d->GetTextExtent(m_label, lw, lh);
+        d->DrawWindowText(x, y, lw + 2, h, m_label, normal, IPluginDrawer::LEFT);
+        d->DrawWindowText(x + lw, y, w - lw, h, m_text.c_str(), vcol, IPluginDrawer::RIGHT);
+        return true;
+    }
+private:
+    const wchar_t* m_name; const wchar_t* m_id; const wchar_t* m_label;
+    Kind m_kind;
+    std::atomic<int>& m_src;
+    int m_value{-1};
+    std::wstring m_text{L"--"};
+};
+
+// the GPU temperature stays a plain text item
 class TempItem : public IPluginItem
 {
 public:
@@ -142,11 +210,11 @@ public:
     const wchar_t* GetItemId() const override { return m_id; }
     const wchar_t* GetItemLableText() const override { return m_label; }
     const wchar_t* GetItemValueText() const override { return m_text.c_str(); }
-    const wchar_t* GetItemValueSampleText() const override { return L"100 °C"; }
+    const wchar_t* GetItemValueSampleText() const override { return L"100 \u00B0C"; }
     void Refresh()
     {
         int t = m_src.load();
-        m_text = t > 0 ? std::to_wstring(t) + L" °C" : L"--";
+        m_text = t > 0 ? std::to_wstring(t) + L" \u00B0C" : L"--";
     }
 private:
     const wchar_t* m_name; const wchar_t* m_id; const wchar_t* m_label;
@@ -159,32 +227,61 @@ class LegionTemp : public ITMPlugin
 public:
     IPluginItem* GetItem(int index) override
     {
-        if (index == 0) return &m_cpu;
-        if (index == 1) return &m_gpu;
-        return nullptr;
+        switch (index)
+        {
+        case 0: return &m_cpuUse;   // LegionTemp.cpu_usage
+        case 1: return &m_mem;      // LegionTemp.mem
+        case 2: return &m_gpuUse;   // LegionTemp.gpu_usage
+        case 3: return &m_cpu;      // LegionTemp.cpu  (EC CPU temperature, id kept for existing configs)
+        case 4: return &m_gpu;      // LegionTemp.gpu
+        default: return nullptr;
+        }
+    }
+    void OnInitialize(ITrafficMonitor* pApp) override { m_app = pApp; }
+    void OnMonitorInfo(const MonitorInfo& mi) override
+    {
+        g_cpuUse = mi.cpu_usage; g_mem = mi.memory_usage; g_gpuUse = mi.gpu_usage;
+    }
+    void OnExtenedInfo(ExtendedInfoIndex index, const wchar_t* data) override
+    {
+        if (index == EI_VALUE_TEXT_COLOR && data && *data)
+        {
+            g_hostColor = wcstoul(data, nullptr, 10);
+            g_hostColorKnown = true;
+        }
     }
     void DataRequired() override
     {
         EnsureWorker(); // WMI runs on its own thread; here we only publish the cached value
-        m_cpu.Refresh();
-        m_gpu.Refresh();
+        if (m_app)
+        {
+            g_cpuUse = (int)(m_app->GetMonitorValue(ITrafficMonitor::MI_CPU) + 0.5);
+            g_mem = (int)(m_app->GetMonitorValue(ITrafficMonitor::MI_MEMORY) + 0.5);
+            g_gpuUse = (int)(m_app->GetMonitorValue(ITrafficMonitor::MI_GPU_USAGE) + 0.5);
+        }
+        m_cpu.Refresh(); m_gpu.Refresh();
+        m_cpuUse.Refresh(); m_mem.Refresh(); m_gpuUse.Refresh();
     }
     const wchar_t* GetInfo(PluginInfoIndex index) override
     {
         switch (index)
         {
         case TMI_NAME: return L"LegionTemp";
-        case TMI_DESCRIPTION: return L"Lenovo Legion embedded-controller CPU and GPU temperature (WMI LENOVO_OTHER_METHOD). Needs TrafficMonitor to run as administrator.";
+        case TMI_DESCRIPTION: return L"Colour-coded CPU, MEM, GPU usage and Lenovo Legion EC CPU temperature (WMI LENOVO_OTHER_METHOD). Yellow from 60% / 70 \u00B0C, red above 85. Needs TrafficMonitor to run as administrator.";
         case TMI_AUTHOR: return L"Kollect";
         case TMI_COPYRIGHT: return L"MIT";
-        case TMI_VERSION: return L"1.0";
+        case TMI_VERSION: return L"2.0";
         case TMI_URL: return L"https://github.com/dxiiren/TrafficMonitor";
         default: return L"";
         }
     }
 private:
-    TempItem m_cpu{L"Legion CPU Temperature", L"LegionTemp.cpu", L"TEMP: ", g_cpu};
+    ITrafficMonitor* m_app{nullptr};
+    StatusItem m_cpu{L"Legion CPU Temperature", L"LegionTemp.cpu", L"TEMP: ", Kind::Temp, g_cpu};
     TempItem m_gpu{L"Legion GPU Temperature", L"LegionTemp.gpu", L"GPU T: ", g_gpu};
+    StatusItem m_cpuUse{L"CPU Usage (colour)", L"LegionTemp.cpu_usage", L"CPU: ", Kind::Usage, g_cpuUse};
+    StatusItem m_mem{L"Memory Usage (colour)", L"LegionTemp.mem", L"MEM: ", Kind::Usage, g_mem};
+    StatusItem m_gpuUse{L"GPU Usage (colour)", L"LegionTemp.gpu_usage", L"GPU: ", Kind::Usage, g_gpuUse};
 };
 
 LegionTemp g_plugin;
