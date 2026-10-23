@@ -1655,6 +1655,7 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
         CSingleLock sync(&theApp.m_minitor_lib_critical, TRUE);
         CString error_info = CCommon::LoadText(IDS_HARDWARE_INFO_ACQUIRE_FAILED_ERROR);
 
+        bool got_hardware_info = true;
         auto getHardwareInfo = [&]() {
             __try
             {
@@ -1662,16 +1663,27 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
             }
             __except (EXCEPTION_EXECUTE_HANDLER)
             {
-                AfxMessageBox(error_info, MB_ICONERROR | MB_OK);
+                got_hardware_info = false;
             }
         };
 
         getHardwareInfo();
         auto monitor_error_message{ OpenHardwareMonitorApi::GetErrorMessage() };
-        if (!monitor_error_message.empty())
+        if (!got_hardware_info || !monitor_error_message.empty())
         {
-            AfxMessageBox(monitor_error_message.c_str(), MB_ICONERROR | MB_OK);
+            //never a message box from the poll: log it and reinitialize the library (with a backoff)
+            OnHardwareMonitorFailed(got_hardware_info ? monitor_error_message.c_str() : error_info.GetString());
         }
+        else
+        {
+            m_hwmon_backoff_ms = 30000;
+        }
+        if (theApp.m_pMonitor == nullptr)
+        {
+            //reinitialization in progress, nothing to read this time
+        }
+        else
+        {
         //theApp.m_cpu_temperature = theApp.m_pMonitor->CpuTemperature();
         theApp.m_gpu_temperature = theApp.m_pMonitor->GpuTemperature();
         //theApp.m_hdd_temperature = theApp.m_pMonitor->HDDTemperature();
@@ -1735,6 +1747,19 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
                 theApp.m_hdd_usage = -1;
             }
         }
+        }
+    }
+    else if (IsTemperatureNeeded() && theApp.m_pMonitor == nullptr && !theApp.m_hwmon_init_running)
+    {
+        //the library failed to initialize (or was dropped): try again, with a backoff
+        OnHardwareMonitorFailed(_T("hardware monitor is not initialized"));
+    }
+
+    //resume from sleep/hibernate: reinitialize the library once the devices are back
+    if (m_hwmon_resume_tick != 0 && GetTickCount64() >= m_hwmon_resume_tick && !theApp.m_hwmon_init_running)
+    {
+        m_hwmon_resume_tick = 0;
+        ReinitHardwareMonitor(_T("system resumed from sleep/hibernation"));
     }
 #endif
 
@@ -3322,8 +3347,41 @@ void CTrafficMonitorDlg::OnPluginDetailTaksbar()
 }
 
 
+void CTrafficMonitorDlg::ReinitHardwareMonitor(LPCTSTR reason)
+{
+#ifndef WITHOUT_TEMPERATURE
+    if (theApp.m_hwmon_init_running)
+        return;
+    CSingleLock sync(&theApp.m_minitor_lib_critical, TRUE);
+    CString info;
+    info.Format(_T("Hardware monitor reinitialized: %s"), reason);
+    CCommon::WriteLog(info, theApp.m_log_path.c_str());
+    theApp.m_pMonitor.reset();
+    theApp.InitOpenHardwareLibInThread();
+#endif
+}
+
+void CTrafficMonitorDlg::OnHardwareMonitorFailed(LPCTSTR reason)
+{
+#ifndef WITHOUT_TEMPERATURE
+    ULONGLONG now = GetTickCount64();
+    if (now < m_hwmon_retry_tick)
+        return;
+    m_hwmon_retry_tick = now + m_hwmon_backoff_ms;
+    CString info;
+    info.Format(_T("Error getting hardware monitoring data: %s (next retry in %u s at the earliest)"), reason, m_hwmon_backoff_ms / 1000);
+    CCommon::WriteLog(info, theApp.m_log_path.c_str());
+    m_hwmon_backoff_ms = min(m_hwmon_backoff_ms * 2, 300000u);
+    ReinitHardwareMonitor(reason);
+#endif
+}
+
 UINT CTrafficMonitorDlg::OnPowerBroadcast(UINT nPowerEvent, LPARAM nEventData)
 {
+    // 系统从休眠/睡眠恢复：稍后重新初始化硬件监控库
+    if ((nPowerEvent == PBT_APMRESUMEAUTOMATIC || nPowerEvent == PBT_APMRESUMESUSPEND) && m_hwmon_resume_tick == 0)
+        m_hwmon_resume_tick = GetTickCount64() + 10000;
+
     // 系统从休眠恢复
     if (nPowerEvent == PBT_APMRESUMESUSPEND)
     {
