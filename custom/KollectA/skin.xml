@@ -11,18 +11,18 @@
 		<skin_author>Kollect</skin_author>
 		<font name="Segoe UI" size="9" style="0"/>
 		<display_text>
-			<lt_cpu>CPU </lt_cpu>
-			<lt_mem>MEM </lt_mem>
-			<lt_gpu>GPU </lt_gpu>
-			<lt_temp>TMP </lt_temp>
+			<lt_cpu>CPU  </lt_cpu>
+			<lt_mem>MEM  </lt_mem>
+			<lt_gpu>GPU  </lt_gpu>
+			<lt_temp>TMP  </lt_temp>
 		</display_text>
 	</skin>
 	<layout text_height="18" no_label="0">
-		<layout_l width="136" height="44">
-			<lt_cpu x="6" y="2" width="62" align="0" show="1"/>
-			<lt_mem x="70" y="2" width="62" align="0" show="1"/>
-			<lt_gpu x="6" y="22" width="62" align="0" show="1"/>
-			<lt_temp x="70" y="22" width="62" align="0" show="1"/>
+		<layout_l width="184" height="46">
+			<lt_cpu x="10" y="3" width="76" align="0" show="1"/>
+			<lt_mem x="100" y="3" width="76" align="0" show="1"/>
+			<lt_gpu x="10" y="24" width="76" align="0" show="1"/>
+			<lt_temp x="100" y="24" width="76" align="0" show="1"/>
 			<cpu x="0" y="0" width="0" align="0" show="0"/>
 			<memory x="0" y="0" width="0" align="0" show="0"/>
 			<gpu x="0" y="0" width="0" align="0" show="0"/>
@@ -32,11 +32,11 @@
 			<down x="0" y="0" width="0" align="0" show="0"/>
 			<hdd_temperature x="0" y="0" width="0" align="0" show="0"/>
 		</layout_l>
-		<layout_s width="136" height="44">
-			<lt_cpu x="6" y="2" width="62" align="0" show="1"/>
-			<lt_mem x="70" y="2" width="62" align="0" show="1"/>
-			<lt_gpu x="6" y="22" width="62" align="0" show="1"/>
-			<lt_temp x="70" y="22" width="62" align="0" show="1"/>
+		<layout_s width="184" height="46">
+			<lt_cpu x="10" y="3" width="76" align="0" show="1"/>
+			<lt_mem x="100" y="3" width="76" align="0" show="1"/>
+			<lt_gpu x="10" y="24" width="76" align="0" show="1"/>
+			<lt_temp x="100" y="24" width="76" align="0" show="1"/>
 			<cpu x="0" y="0" width="0" align="0" show="0"/>
 			<memory x="0" y="0" width="0" align="0" show="0"/>
 			<gpu x="0" y="0" width="0" align="0" show="0"/>
@@ -47,7 +47,7 @@
 			<hdd_temperature x="0" y="0" width="0" align="0" show="0"/>
 		</layout_s>
 	</layout>
-	<preview width="146" height="54">
+	<preview width="194" height="56">
 		<l x="0" y="0"/>
 		<s x="0" y="0"/>
 	</preview>

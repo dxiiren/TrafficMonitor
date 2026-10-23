@@ -9,11 +9,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 SKINS = {
     # name: (width, height, [(item, x, y, w), ...])
-    "KollectA": (136, 44, [("lt_cpu", 6, 2, 62), ("lt_mem", 70, 2, 62), ("lt_gpu", 6, 22, 62), ("lt_temp", 70, 22, 62)]),
-    "KollectB": (292, 22, [("lt_cpu", 4, 1, 68), ("lt_mem", 76, 1, 70), ("lt_gpu", 150, 1, 66), ("lt_temp", 220, 1, 68)]),
-    "KollectC": (78, 84, [("lt_cpu", 6, 2, 68), ("lt_mem", 6, 22, 68), ("lt_gpu", 6, 42, 68), ("lt_temp", 6, 62, 68)]),
+    "KollectA": (184, 46, [("lt_cpu", 10, 3, 76), ("lt_mem", 100, 3, 76), ("lt_gpu", 10, 24, 76), ("lt_temp", 100, 24, 76)]),
+    "KollectB": (380, 24, [("lt_cpu", 10, 2, 80), ("lt_mem", 100, 2, 82), ("lt_gpu", 194, 2, 78), ("lt_temp", 284, 2, 86)]),
+    "KollectC": (96, 88, [("lt_cpu", 10, 3, 80), ("lt_mem", 10, 24, 80), ("lt_gpu", 10, 45, 80), ("lt_temp", 10, 66, 80)]),
 }
-LABELS = {"lt_cpu": "CPU ", "lt_mem": "MEM ", "lt_gpu": "GPU ", "lt_temp": "TMP "}
+LABELS = {"lt_cpu": "CPU  ", "lt_mem": "MEM  ", "lt_gpu": "GPU  ", "lt_temp": "TMP  "}
 HIDDEN = ["cpu", "memory", "gpu", "cpu_temperature", "gpu_temperature", "up", "down", "hdd_temperature"]
 
 
