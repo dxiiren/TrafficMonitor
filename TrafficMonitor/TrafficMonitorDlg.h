@@ -202,6 +202,18 @@ protected:
     //判断一个点在哪个显示项目的区域内，并保存到m_clicked_item
     void CheckClickedItem(CPoint point);
 
+    //悬浮窗缩放（用鼠标拖动边框或通过右键菜单“大小”）
+    CSize GetSkinBaseSize() const;                  //皮肤的原始（100%）大小
+    CSize GetScaledSize() const;                    //按当前缩放比例的窗口大小
+    CPoint ToSkinPoint(CPoint client_point) const;  //将窗口客户区坐标换算为皮肤原始坐标
+    void ApplyWindowScale(int percent, UINT anchor_hit_test = HTCLIENT, const CRect* start_rect = nullptr);  //应用缩放比例
+    bool CanResizeWindow() const;                   //窗口是否允许缩放（未锁定位置、未鼠标穿透）
+    bool m_resizing{ false };
+    UINT m_resize_hit{};
+    CRect m_resize_start_rect;
+    CPoint m_resize_start_cursor;
+    int m_resize_start_scale{ 100 };
+
     //应用一个皮肤
     void ApplySkin(int skin_index);
 
@@ -280,6 +292,10 @@ protected:
 public:
     afx_msg void OnDisplaySettings();
     afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
+    afx_msg LRESULT OnNcHitTest(CPoint point);
+    afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint point);
+    afx_msg void OnCaptureChanged(CWnd* pWnd);
+    afx_msg void OnWindowScaleCommand(UINT nID);
     afx_msg void OnRefreshConnectionList();
 protected:
     afx_msg LRESULT OnTabletQuerysystemgesturestatus(WPARAM wParam, LPARAM lParam);

@@ -555,12 +555,15 @@ void CSkinFile::DrawPreview(CDC* pDC, CRect rect)
     }
 }
 
-void CSkinFile::DrawInfo(CDC* pDC, bool show_more_info)
+void CSkinFile::DrawInfo(CDC* pDC, bool show_more_info, int scale_percent)
 {
     //绘制背景图
     Layout& layout{ show_more_info ? m_layout_info.layout_l : m_layout_info.layout_s };
 
     CRect rect(CPoint(0, 0), CSize(layout.width, layout.height));
+    //悬浮窗缩放：始终按皮肤原始大小绘制，最后拉伸到缩放后的窗口大小
+    const bool scaled{ scale_percent != 100 };
+    const CSize scaled_size{ ::MulDiv(rect.Width(), scale_percent, 100), ::MulDiv(rect.Height(), scale_percent, 100) };
 
     //如果是PNG格式背景，使用UpdateLayeredWindow函数以支持透明背景，显示项目使用GDI+绘制
     if (IsPNG())
@@ -594,14 +597,33 @@ void CSkinFile::DrawInfo(CDC* pDC, bool show_more_info)
 
         SIZE sizeWindow = rect.Size();
         POINT ptSrc = { 0,0 };
-        ::UpdateLayeredWindow(hWnd, pDC->GetSafeHdc(), nullptr, &sizeWindow, hdcMemory, &ptSrc, 0, &bf, ULW_ALPHA);
+        HDC hdcScaled{};
+        HBITMAP hScaledBitmap{};
+        HDC hdcSource{ hdcMemory };
+        if (scaled)
+        {
+            hdcScaled = CreateCompatibleDC(pDC->GetSafeHdc());
+            hScaledBitmap = CreateCompatibleBitmap(pDC->GetSafeHdc(), scaled_size.cx, scaled_size.cy);
+            SelectObject(hdcScaled, hScaledBitmap);
+            SetStretchBltMode(hdcScaled, HALFTONE);
+            SetBrushOrgEx(hdcScaled, 0, 0, nullptr);
+            StretchBlt(hdcScaled, 0, 0, scaled_size.cx, scaled_size.cy, hdcMemory, 0, 0, rect.Width(), rect.Height(), SRCCOPY);
+            sizeWindow = scaled_size;
+            hdcSource = hdcScaled;
+        }
+        ::UpdateLayeredWindow(hWnd, pDC->GetSafeHdc(), nullptr, &sizeWindow, hdcSource, &ptSrc, 0, &bf, ULW_ALPHA);
+        if (scaled)
+        {
+            DeleteObject(hScaledBitmap);
+            DeleteDC(hdcScaled);
+        }
 
         gdiplus_drawer.GetGraphics()->ReleaseHDC(hdcMemory);
         DeleteObject(hBitMap);
         DeleteDC(hdcMemory);
     }
     //bmp格式背景，使用gdi绘制背景和显示项目
-    else
+    else if (!scaled)
     {
         CDrawDoubleBuffer draw_double_buffer(pDC, rect);
         CDrawCommon draw;
@@ -611,6 +633,26 @@ void CSkinFile::DrawInfo(CDC* pDC, bool show_more_info)
         draw.DrawBitmap(background_image, CPoint(0, 0), CSize(layout.width, layout.height));
 
         DrawItemsInfo(draw, layout, m_font);
+    }
+    else
+    {
+        //缩放：先按原始大小绘制到内存DC，再拉伸到窗口
+        CDC mem_dc;
+        mem_dc.CreateCompatibleDC(NULL);
+        CBitmap mem_bitmap;
+        mem_bitmap.CreateCompatibleBitmap(pDC, rect.Width(), rect.Height());
+        CBitmap* old_bitmap = mem_dc.SelectObject(&mem_bitmap);
+        {
+            CDrawCommon draw;
+            draw.Create(&mem_dc, nullptr);
+            CImage& background_image{ show_more_info ? m_background_l : m_background_s };
+            draw.DrawBitmap(background_image, CPoint(0, 0), CSize(layout.width, layout.height));
+            DrawItemsInfo(draw, layout, m_font);
+        }
+        pDC->SetStretchBltMode(HALFTONE);
+        pDC->SetBrushOrg(0, 0);
+        pDC->StretchBlt(0, 0, scaled_size.cx, scaled_size.cy, &mem_dc, 0, 0, rect.Width(), rect.Height(), SRCCOPY);
+        mem_dc.SelectObject(old_bitmap);
     }
 }
 

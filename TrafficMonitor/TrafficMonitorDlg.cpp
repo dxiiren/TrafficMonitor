@@ -133,6 +133,10 @@ BEGIN_MESSAGE_MAP(CTrafficMonitorDlg, CDialog)
     ON_MESSAGE(WM_SETTINGS_APPLIED, &CTrafficMonitorDlg::OnSettingsApplied)
     ON_COMMAND(ID_DISPLAY_SETTINGS, &CTrafficMonitorDlg::OnDisplaySettings)
     ON_WM_LBUTTONUP()
+    ON_WM_NCHITTEST()
+    ON_WM_NCLBUTTONDOWN()
+    ON_WM_CAPTURECHANGED()
+    ON_COMMAND_RANGE(ID_WINDOW_SCALE_FIRST, ID_WINDOW_SCALE_LAST, &CTrafficMonitorDlg::OnWindowScaleCommand)
     ON_COMMAND(ID_REFRESH_CONNECTION_LIST, &CTrafficMonitorDlg::OnRefreshConnectionList)
     ON_MESSAGE(WM_TABLET_QUERYSYSTEMGESTURESTATUS, &CTrafficMonitorDlg::OnTabletQuerysystemgesturestatus)
     ON_COMMAND(ID_PLUGIN_OPTIONS, &CTrafficMonitorDlg::OnPluginOptions)
@@ -949,14 +953,124 @@ void CTrafficMonitorDlg::ApplySettings(COptionsDlg& optionsDlg)
 
 void CTrafficMonitorDlg::SetItemPosition()
 {
-    if (theApp.m_cfg_data.m_show_more_info)
-    {
-        SetWindowPos(nullptr, 0, 0, m_skin.GetLayoutInfo().layout_l.width, m_skin.GetLayoutInfo().layout_l.height, SWP_NOMOVE | SWP_NOZORDER);
-    }
+    CSize size = GetScaledSize();
+    SetWindowPos(nullptr, 0, 0, size.cx, size.cy, SWP_NOMOVE | SWP_NOZORDER);
+}
+
+static const int kWindowScalePresets[] = { 75, 100, 125, 150, 200, 300 };
+static const int kWindowScaleMin = 50;
+static const int kWindowScaleMax = 400;
+
+CSize CTrafficMonitorDlg::GetSkinBaseSize() const
+{
+    const auto& info = m_skin.GetLayoutInfo();
+    return theApp.m_cfg_data.m_show_more_info ? CSize(info.layout_l.width, info.layout_l.height) : CSize(info.layout_s.width, info.layout_s.height);
+}
+
+CSize CTrafficMonitorDlg::GetScaledSize() const
+{
+    CSize base = GetSkinBaseSize();
+    int scale = theApp.m_cfg_data.m_window_scale;
+    return CSize(max(1, ::MulDiv(base.cx, scale, 100)), max(1, ::MulDiv(base.cy, scale, 100)));
+}
+
+CPoint CTrafficMonitorDlg::ToSkinPoint(CPoint p) const
+{
+    int scale = theApp.m_cfg_data.m_window_scale;
+    if (scale == 100 || scale <= 0)
+        return p;
+    return CPoint(::MulDiv(p.x, 100, scale), ::MulDiv(p.y, 100, scale));
+}
+
+bool CTrafficMonitorDlg::CanResizeWindow() const
+{
+    return !theApp.m_main_wnd_data.m_lock_window_pos && !theApp.m_main_wnd_data.m_mouse_penetrate;
+}
+
+void CTrafficMonitorDlg::ApplyWindowScale(int percent, UINT anchor_hit_test, const CRect* start_rect)
+{
+    percent = max(kWindowScaleMin, min(kWindowScaleMax, percent));
+    CRect rect;
+    if (start_rect != nullptr)
+        rect = *start_rect;
     else
+        GetWindowRect(rect);
+    theApp.m_cfg_data.m_window_scale = percent;
+    CSize size = GetScaledSize();
+    //被拖动的边的对侧保持不动
+    bool left = (anchor_hit_test == HTLEFT || anchor_hit_test == HTTOPLEFT || anchor_hit_test == HTBOTTOMLEFT);
+    bool top = (anchor_hit_test == HTTOP || anchor_hit_test == HTTOPLEFT || anchor_hit_test == HTTOPRIGHT);
+    int x = left ? rect.right - size.cx : rect.left;
+    int y = top ? rect.bottom - size.cy : rect.top;
+    SetWindowPos(nullptr, x, y, size.cx, size.cy, SWP_NOZORDER | SWP_NOACTIVATE);
+    LoadBackGroundImage();
+    Invalidate(FALSE);
+}
+
+LRESULT CTrafficMonitorDlg::OnNcHitTest(CPoint point)
+{
+    if (CanResizeWindow() && !m_first_start)
     {
-        SetWindowPos(nullptr, 0, 0, m_skin.GetLayoutInfo().layout_s.width, m_skin.GetLayoutInfo().layout_s.height, SWP_NOMOVE | SWP_NOZORDER);
+        CRect rect;
+        GetWindowRect(rect);
+        if (rect.PtInRect(point))
+        {
+            const int border = max(4, theApp.DPI(5));
+            bool l = point.x < rect.left + border, r = point.x >= rect.right - border;
+            bool t = point.y < rect.top + border, b = point.y >= rect.bottom - border;
+            if (t && l) return HTTOPLEFT;
+            if (t && r) return HTTOPRIGHT;
+            if (b && l) return HTBOTTOMLEFT;
+            if (b && r) return HTBOTTOMRIGHT;
+            if (l) return HTLEFT;
+            if (r) return HTRIGHT;
+            if (t) return HTTOP;
+            if (b) return HTBOTTOM;
+        }
     }
+    return CDialog::OnNcHitTest(point);
+}
+
+void CTrafficMonitorDlg::OnNcLButtonDown(UINT nHitTest, CPoint point)
+{
+    switch (nHitTest)
+    {
+    case HTLEFT: case HTRIGHT: case HTTOP: case HTBOTTOM:
+    case HTTOPLEFT: case HTTOPRIGHT: case HTBOTTOMLEFT: case HTBOTTOMRIGHT:
+        if (CanResizeWindow())
+        {
+            m_resizing = true;
+            m_resize_hit = nHitTest;
+            m_resize_start_cursor = point;
+            m_resize_start_scale = theApp.m_cfg_data.m_window_scale;
+            GetWindowRect(m_resize_start_rect);
+            SetCapture();
+        }
+        return;     //不允许缩放时（已锁定）也不交给系统处理，避免进入系统的缩放循环
+    }
+    CDialog::OnNcLButtonDown(nHitTest, point);
+}
+
+void CTrafficMonitorDlg::OnCaptureChanged(CWnd* pWnd)
+{
+    if (m_resizing)
+    {
+        m_resizing = false;
+        theApp.SaveConfig();
+    }
+    CDialog::OnCaptureChanged(pWnd);
+}
+
+void CTrafficMonitorDlg::OnWindowScaleCommand(UINT nID)
+{
+    if (!CanResizeWindow())
+        return;
+    int index = static_cast<int>(nID - ID_WINDOW_SCALE_FIRST);
+    if (index < 0 || index >= static_cast<int>(sizeof(kWindowScalePresets) / sizeof(int)))
+        return;
+    ApplyWindowScale(kWindowScalePresets[index]);
+    CheckWindowPos();
+    theApp.SaveConfig();
 }
 
 bool CTrafficMonitorDlg::LoadSkinLayout()
@@ -971,14 +1085,7 @@ void CTrafficMonitorDlg::LoadBackGroundImage()
 {
     CImage img_tmp;
     CSize image_size;
-    if (theApp.m_cfg_data.m_show_more_info)
-    {
-        image_size.SetSize(m_skin.GetLayoutInfo().layout_l.width, m_skin.GetLayoutInfo().layout_l.height);
-    }
-    else
-    {
-        image_size.SetSize(m_skin.GetLayoutInfo().layout_s.width, m_skin.GetLayoutInfo().layout_s.height);
-    }
+    image_size = GetScaledSize();
 
     //创建窗口区域
     CImage img_mask;
@@ -1056,6 +1163,7 @@ void CTrafficMonitorDlg::TaskbarShowHideItem(DisplayItem type)
 
 void CTrafficMonitorDlg::CheckClickedItem(CPoint point)
 {
+    point = ToSkinPoint(point);
     const CSkinFile::Layout& skin_layout{ theApp.m_cfg_data.m_show_more_info ? m_skin.GetLayoutInfo().layout_l : m_skin.GetLayoutInfo().layout_s }; //当前的皮肤布局
     for (const auto& layout_item : skin_layout.layout_items)
     {
@@ -2112,6 +2220,8 @@ void CTrafficMonitorDlg::OnRButtonUp(UINT nFlags, CPoint point)
 {
     // TODO: 在此添加消息处理程序代码和/或调用默认值
     CheckClickedItem(point);
+    const CPoint raw_point{ point };
+    point = ToSkinPoint(point);     //插件项目使用皮肤原始坐标
     bool is_plugin_item_clicked = (m_clicked_item.IsPlugin() && m_clicked_item.PluginItem() != nullptr);
     ITMPlugin* plugin{};
     if (is_plugin_item_clicked)
@@ -2125,7 +2235,7 @@ void CTrafficMonitorDlg::OnRButtonUp(UINT nFlags, CPoint point)
     }
     //设置点击鼠标右键弹出菜单
     CMenu* pContextMenu = (is_plugin_item_clicked ? theApp.m_main_menu_plugin.GetSubMenu(0) : theApp.m_main_menu.GetSubMenu(0));
-    CPoint point1{ point };     //菜单位置取自点击位置（而不是光标）
+    CPoint point1{ raw_point };     //菜单位置取自点击位置（而不是光标）
     ClientToScreen(&point1);
     //设置默认菜单项
     switch (theApp.m_main_wnd_data.double_click_action)
@@ -2175,6 +2285,8 @@ void CTrafficMonitorDlg::OnLButtonDown(UINT nFlags, CPoint point)
 {
     // TODO: 在此添加消息处理程序代码和/或调用默认值
     CheckClickedItem(point);
+    const CPoint raw_point{ point };
+    point = ToSkinPoint(point);     //插件项目使用皮肤原始坐标
     bool plugin_item_clicked = false;   //是否响应了插件项目的左键点击事件
     if (m_clicked_item.IsPlugin() && m_clicked_item.PluginItem() != nullptr)      //点击的是否为插件项目
     {
@@ -2191,8 +2303,8 @@ void CTrafficMonitorDlg::OnLButtonDown(UINT nFlags, CPoint point)
 
     //在未锁定窗口位置时允许通过点击窗口内部来拖动窗口
     if (!theApp.m_main_wnd_data.m_lock_window_pos && !plugin_item_clicked)
-        PostMessage(WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(point.x, point.y));
-    CDialog::OnLButtonDown(nFlags, point);
+        PostMessage(WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(raw_point.x, raw_point.y));
+    CDialog::OnLButtonDown(nFlags, raw_point);
 }
 
 
@@ -2342,6 +2454,17 @@ void CTrafficMonitorDlg::OnInitMenu(CMenu* pMenu)
     m_menu_popuped = true;
 
     pMenu->CheckMenuItem(ID_ALWAYS_ON_TOP, MF_BYCOMMAND | (theApp.m_main_wnd_data.m_always_on_top ? MF_CHECKED : MF_UNCHECKED));
+    {
+        //“大小”子菜单：勾选当前比例，锁定窗口位置或鼠标穿透时禁用
+        const int n = static_cast<int>(sizeof(kWindowScalePresets) / sizeof(int));
+        for (int i = 0; i < n; i++)
+        {
+            UINT id = ID_WINDOW_SCALE_FIRST + i;
+            bool cur = (kWindowScalePresets[i] == theApp.m_cfg_data.m_window_scale);
+            theApp.m_window_scale_menu.CheckMenuItem(id, MF_BYCOMMAND | (cur ? MF_CHECKED : MF_UNCHECKED));
+            theApp.m_window_scale_menu.EnableMenuItem(id, MF_BYCOMMAND | (CanResizeWindow() ? MF_ENABLED : MF_GRAYED));
+        }
+    }
     pMenu->CheckMenuItem(ID_LOCK_WINDOW_POS, MF_BYCOMMAND | (theApp.m_main_wnd_data.m_lock_window_pos ? MF_CHECKED : MF_UNCHECKED));
     pMenu->CheckMenuItem(ID_SHOW_CPU_MEMORY, MF_BYCOMMAND | (theApp.m_cfg_data.m_show_more_info ? MF_CHECKED : MF_UNCHECKED));
     pMenu->CheckMenuItem(ID_MOUSE_PENETRATE, MF_BYCOMMAND | (theApp.m_main_wnd_data.m_mouse_penetrate ? MF_CHECKED : MF_UNCHECKED));
@@ -2554,20 +2677,11 @@ void CTrafficMonitorDlg::OnShowCpuMemory()
     CRect rect;
     GetWindowRect(rect);
     theApp.m_cfg_data.m_show_more_info = !theApp.m_cfg_data.m_show_more_info;
-    if (theApp.m_cfg_data.m_show_more_info)
-    {
-        rect.right = rect.left + m_skin.GetLayoutInfo().layout_l.width;
-        rect.bottom = rect.top + m_skin.GetLayoutInfo().layout_l.width;
-        MoveWindow(rect);
-        CheckWindowPos();
-    }
-    else
-    {
-        rect.right = rect.left + m_skin.GetLayoutInfo().layout_s.width;
-        rect.bottom = rect.top + m_skin.GetLayoutInfo().layout_s.height;
-        MoveWindow(rect);
-        CheckWindowPos();
-    }
+    CSize scaled_size = GetScaledSize();
+    rect.right = rect.left + scaled_size.cx;
+    rect.bottom = rect.top + scaled_size.cy;
+    MoveWindow(rect);
+    CheckWindowPos();
     LoadBackGroundImage();
     SetItemPosition();
     Invalidate(FALSE);
@@ -2730,7 +2844,29 @@ void CTrafficMonitorDlg::OnTrafficHistory()
 
 void CTrafficMonitorDlg::OnMouseMove(UINT nFlags, CPoint point)
 {
-    // TODO: 在此添加消息处理程序代码和/或调用默认值
+    if (m_resizing)
+    {
+        CPoint cur{ point };
+        ClientToScreen(&cur);
+        const CRect& r = m_resize_start_rect;
+        const CSize base = GetSkinBaseSize();
+        int sx = 0, sy = 0;
+        switch (m_resize_hit)
+        {
+        case HTRIGHT: case HTTOPRIGHT: case HTBOTTOMRIGHT: sx = ::MulDiv(cur.x - r.left, 100, base.cx); break;
+        case HTLEFT: case HTTOPLEFT: case HTBOTTOMLEFT: sx = ::MulDiv(r.right - cur.x, 100, base.cx); break;
+        }
+        switch (m_resize_hit)
+        {
+        case HTBOTTOM: case HTBOTTOMLEFT: case HTBOTTOMRIGHT: sy = ::MulDiv(cur.y - r.top, 100, base.cy); break;
+        case HTTOP: case HTTOPLEFT: case HTTOPRIGHT: sy = ::MulDiv(r.bottom - cur.y, 100, base.cy); break;
+        }
+        int scale = max(sx, sy);
+        scale = max(kWindowScaleMin, min(kWindowScaleMax, scale));
+        if (scale != theApp.m_cfg_data.m_window_scale)
+            ApplyWindowScale(scale, m_resize_hit, &m_resize_start_rect);
+        return;
+    }
 
     CDialog::OnMouseMove(nFlags, point);
 }
@@ -2740,6 +2876,8 @@ void CTrafficMonitorDlg::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
     // TODO: 在此添加消息处理程序代码和/或调用默认值
     CheckClickedItem(point);
+    const CPoint raw_point{ point };
+    point = ToSkinPoint(point);     //插件项目使用皮肤原始坐标
     if (m_clicked_item.IsPlugin() && m_clicked_item.PluginItem() != nullptr)
     {
         ITMPlugin* plugin = theApp.m_plugins.GetPluginByItem(m_clicked_item.PluginItem());
@@ -2776,7 +2914,7 @@ void CTrafficMonitorDlg::OnLButtonDblClk(UINT nFlags, CPoint point)
     default:
         break;
     }
-    CDialog::OnLButtonDblClk(nFlags, point);
+    CDialog::OnLButtonDblClk(nFlags, raw_point);
 }
 
 
@@ -2899,7 +3037,7 @@ void CTrafficMonitorDlg::OnPaint()
     CPaintDC dc(this); // device context for painting
                        // TODO: 在此处添加消息处理程序代码
                        // 不为绘图消息调用 CDialog::OnPaint()
-    m_skin.DrawInfo(&dc, theApp.m_cfg_data.m_show_more_info);
+    m_skin.DrawInfo(&dc, theApp.m_cfg_data.m_show_more_info, theApp.m_cfg_data.m_window_scale);
 }
 
 
@@ -3051,7 +3189,18 @@ void CTrafficMonitorDlg::OnDisplaySettings()
 
 void CTrafficMonitorDlg::OnLButtonUp(UINT nFlags, CPoint point)
 {
-    // TODO: 在此添加消息处理程序代码和/或调用默认值
+    if (m_resizing)
+    {
+        ReleaseCapture();       //触发OnCaptureChanged，保存缩放比例
+        if (m_resizing)
+        {
+            //未持有鼠标捕获时（例如由消息模拟），直接结束缩放
+            m_resizing = false;
+            CheckWindowPos();
+            theApp.SaveConfig();
+        }
+        return;
+    }
     //CheckClickedItem(point);
     //if (m_clicked_item.IsPlugin() && m_clicked_item.PluginItem() != nullptr)
     //{

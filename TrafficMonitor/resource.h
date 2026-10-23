@@ -463,6 +463,8 @@
 #define ID_PLUGIN_COMMAND_START         33408
 #define ID_PLUGIN_COMMAND_MAX           33664
 #define ID_RESTORE_DEFAULT              33665
+#define ID_WINDOW_SCALE_FIRST           33680
+#define ID_WINDOW_SCALE_LAST            33685
 
 // Next default values for new objects
 // 
