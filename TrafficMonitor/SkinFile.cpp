@@ -603,11 +603,23 @@ void CSkinFile::DrawInfo(CDC* pDC, bool show_more_info, int scale_percent)
         if (scaled)
         {
             hdcScaled = CreateCompatibleDC(pDC->GetSafeHdc());
-            hScaledBitmap = CreateCompatibleBitmap(pDC->GetSafeHdc(), scaled_size.cx, scaled_size.cy);
+            //StretchBlt会丢失alpha通道（整个窗口变成完全透明，鼠标点击会穿透），所以用32位DIB + AlphaBlend缩放，保留每个像素的alpha
+            BITMAPINFO bmi{};
+            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+            bmi.bmiHeader.biWidth = scaled_size.cx;
+            bmi.bmiHeader.biHeight = -scaled_size.cy;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = BI_RGB;
+            void* bits{};
+            hScaledBitmap = CreateDIBSection(pDC->GetSafeHdc(), &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
             SelectObject(hdcScaled, hScaledBitmap);
+            BLENDFUNCTION sbf{};
+            sbf.BlendOp = AC_SRC_OVER;
+            sbf.SourceConstantAlpha = 255;
+            sbf.AlphaFormat = AC_SRC_ALPHA;
             SetStretchBltMode(hdcScaled, HALFTONE);
-            SetBrushOrgEx(hdcScaled, 0, 0, nullptr);
-            StretchBlt(hdcScaled, 0, 0, scaled_size.cx, scaled_size.cy, hdcMemory, 0, 0, rect.Width(), rect.Height(), SRCCOPY);
+            AlphaBlend(hdcScaled, 0, 0, scaled_size.cx, scaled_size.cy, hdcMemory, 0, 0, rect.Width(), rect.Height(), sbf);
             sizeWindow = scaled_size;
             hdcSource = hdcScaled;
         }
