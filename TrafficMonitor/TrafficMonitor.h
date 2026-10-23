@@ -8,6 +8,7 @@
 #error "在包含此文件之前包含“stdafx.h”以生成 PCH 文件"
 #endif
 
+#include <atomic>
 #include "resource.h"       // 主符号
 #include "Common.h"
 #include "WinVersionHelper.h"
@@ -104,6 +105,7 @@ public:
     std::shared_ptr<OpenHardwareMonitorApi::IOpenHardwareMonitor> m_pMonitor{};
 #endif // !WITHOUT_TEMPERATURE
 
+    std::atomic<bool> m_hwmon_init_running{};       //后台线程正在初始化OpenHardwareMonitor
     CCriticalSection m_minitor_lib_critical;        //用于访问OpenHardwareMonitor进行线程同步的临界区对象
     //CCriticalSection m_lftable_critical;            //用于访问LfTable2进行线程同步的临界区对象
     CLazyConstructable<class CTaskBarDlgDrawCommonSupport> m_d2d_taskbar_draw_common_support{}; // 当使用D2D渲染时自动初始化的全局依赖

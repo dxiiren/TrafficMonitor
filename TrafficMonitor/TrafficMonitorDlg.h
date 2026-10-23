@@ -107,6 +107,9 @@ protected:
     CSkinFile m_skin;
     CommonDisplayItem m_clicked_item;           //鼠标点击的项目
 
+    ULONGLONG m_hwmon_retry_tick{};             //not before this tick count (ms) may the hardware monitor be reinitialized again
+    DWORD m_hwmon_backoff_ms{ 30000 };          //doubles on every failed reinitialization, capped at 5 min
+    ULONGLONG m_hwmon_resume_tick{};            //nonzero: reinitialize the hardware monitor at this tick count (after resume from sleep)
     int m_restart_cnt{ -1 };    //重新初始化次数
     unsigned int m_timer_cnt{};     //定时器触发次数（自程序启动以来的秒数）
     unsigned int m_taskbar_timer_cnt{0}; //适用于TaskBarDlg的定时器触发次数（自程序启动以来的秒数）
@@ -306,5 +309,7 @@ public:
     afx_msg void OnPluginOptionsTaksbar();
     afx_msg void OnPluginDetailTaksbar();
     afx_msg UINT OnPowerBroadcast(UINT nPowerEvent, LPARAM nEventData);
+    void ReinitHardwareMonitor(LPCTSTR reason);
+    void OnHardwareMonitorFailed(LPCTSTR reason);
     afx_msg void OnColorizationColorChanged(DWORD dwColorizationColor, BOOL bOpacity);
 };

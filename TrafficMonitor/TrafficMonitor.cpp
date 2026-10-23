@@ -631,10 +631,14 @@ UINT CTrafficMonitorApp::InitOpenHardwareMonitorLibThreadFunc(LPVOID lpParam)
     theApp.m_pMonitor = OpenHardwareMonitorApi::CreateInstance();
     if (theApp.m_pMonitor == nullptr)
     {
-        AfxMessageBox(OpenHardwareMonitorApi::GetErrorMessage().c_str(), MB_ICONERROR | MB_OK);
+        //never show a message box from here: log it, the poll in CTrafficMonitorDlg retries with a backoff
+        CString info;
+        info.Format(_T("Hardware monitor initialization failed: %s"), OpenHardwareMonitorApi::GetErrorMessage().c_str());
+        CCommon::WriteLog(info, theApp.m_log_path.c_str());
     }
     //设置硬件监控的启用状态
     theApp.UpdateOpenHardwareMonitorEnableState();
+    theApp.m_hwmon_init_running = false;
 #endif
     return 0;
 }
@@ -1162,6 +1166,7 @@ BOOL CTrafficMonitorApp::InitInstance()
 void CTrafficMonitorApp::InitOpenHardwareLibInThread()
 {
 #ifndef WITHOUT_TEMPERATURE
+    m_hwmon_init_running = true;
     AfxBeginThread(InitOpenHardwareMonitorLibThreadFunc, NULL);
 #endif
 }
