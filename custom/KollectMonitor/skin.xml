@@ -1,0 +1,46 @@
+﻿<root>
+	<plugin_map>
+		<legion_temp>LegionTemp.cpu</legion_temp>
+	</plugin_map>
+	<skin>
+		<text_color>16777215</text_color>
+		<specify_each_item_color>0</specify_each_item_color>
+		<skin_author>Kollect</skin_author>
+		<font name="Segoe UI" size="9" style="0"/>
+		<display_text>
+			<cpu>CPU: </cpu>
+			<memory>MEM: </memory>
+			<gpu>GPU: </gpu>
+			<cpu_temperature>CPU T: </cpu_temperature>
+			<gpu_temperature>GPU T: </gpu_temperature>
+		<legion_temp>TEMP: </legion_temp>
+		</display_text>
+	</skin>
+	<layout text_height="20" no_label="0">
+		<layout_l width="232" height="76">
+			<cpu x="12" y="4" width="106" align="0" show="1"/>
+			<memory x="122" y="4" width="106" align="0" show="1"/>
+			<gpu x="12" y="28" width="106" align="0" show="1"/>
+			<cpu_temperature x="122" y="28" width="106" align="0" show="0"/>
+			<gpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<up x="0" y="0" width="0" align="0" show="0"/>
+			<down x="0" y="0" width="0" align="0" show="0"/>
+			<hdd_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<legion_temp x="122" y="28" width="106" align="0" show="1"/>
+		</layout_l>
+		<layout_s width="232" height="76">
+			<cpu x="12" y="4" width="106" align="0" show="1"/>
+			<memory x="122" y="4" width="106" align="0" show="1"/>
+			<gpu x="12" y="28" width="106" align="0" show="1"/>
+			<legion_temp x="122" y="28" width="106" align="0" show="1"/>
+			<cpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<gpu_temperature x="0" y="0" width="0" align="0" show="0"/>
+			<up x="0" y="0" width="0" align="0" show="0"/>
+			<down x="0" y="0" width="0" align="0" show="0"/>
+		</layout_s>
+	</layout>
+	<preview width="250" height="90">
+		<l x="0" y="0"/>
+		<s x="0" y="0"/>
+	</preview>
+</root>
