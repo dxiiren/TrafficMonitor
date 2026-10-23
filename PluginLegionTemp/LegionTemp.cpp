@@ -167,6 +167,8 @@ public:
         if (!hDC || !GetTextExtentPoint32W(static_cast<HDC>(hDC), m_label, (int)wcslen(m_label), &a)
                  || !GetTextExtentPoint32W(static_cast<HDC>(hDC), sample.c_str(), (int)sample.size(), &b))
             return 0; // host falls back to GetItemWidth()
+        SIZE widest{};   // labels share one column (see DrawItem)
+        if (GetTextExtentPoint32W(static_cast<HDC>(hDC), L"TEMP: ", 6, &widest) && widest.cx > a.cx) a.cx = widest.cx;
         return a.cx + b.cx + 6;
     }
     void Refresh()
@@ -195,6 +197,10 @@ public:
         COLORREF oldCol = GetTextColor(dc);
         SIZE sz{};
         GetTextExtentPoint32W(dc, m_label, (int)wcslen(m_label), &sz);
+        // all values start at one column: the width of the widest label, so numbers line up (owner, 23-10)
+        SIZE widest{};
+        GetTextExtentPoint32W(dc, L"TEMP: ", 6, &widest);
+        if (widest.cx > sz.cx) sz.cx = widest.cx;
         RECT rl{ x, y, x + sz.cx + 2, y + h };
         SetTextColor(dc, normal);
         DrawTextW(dc, m_label, -1, &rl, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
