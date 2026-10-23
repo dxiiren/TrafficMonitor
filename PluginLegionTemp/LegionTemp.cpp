@@ -198,9 +198,10 @@ public:
         RECT rl{ x, y, x + sz.cx + 2, y + h };
         SetTextColor(dc, normal);
         DrawTextW(dc, m_label, -1, &rl, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
-        RECT rv{ x + sz.cx, y, x + w, y + h };
+        // value sits right after its label (owner, 23-10: label and number were too far apart when right-aligned)
+        RECT rv{ x + sz.cx + 3, y, x + w, y + h };
         SetTextColor(dc, vcol);
-        DrawTextW(dc, m_text.c_str(), -1, &rv, DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
+        DrawTextW(dc, m_text.c_str(), -1, &rv, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
         SetTextColor(dc, oldCol);
         SetBkMode(dc, oldBk);
     }
