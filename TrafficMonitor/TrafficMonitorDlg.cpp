@@ -1020,6 +1020,21 @@ bool CTrafficMonitorDlg::IsTaskbarWndValid() const
     return m_tBarDlg != nullptr && ::IsWindow(m_tBarDlg->GetSafeHwnd());
 }
 
+CTaskBarDlg* CTrafficMonitorDlg::GetMenuTaskbarWnd() const
+{
+    if (m_menu_tbar != nullptr)
+    {
+        if (m_menu_tbar == m_tBarDlg && IsTaskbarWndValid())
+            return m_menu_tbar;
+        for (auto* p : m_extraTBarDlgs)
+        {
+            if (p == m_menu_tbar && ::IsWindow(p->GetSafeHwnd()))
+                return p;
+        }
+    }
+    return IsTaskbarWndValid() ? m_tBarDlg : nullptr;
+}
+
 void CTrafficMonitorDlg::TaskbarShowHideItem(DisplayItem type)
 {
     if (IsTaskbarWndValid())
@@ -2110,8 +2125,8 @@ void CTrafficMonitorDlg::OnRButtonUp(UINT nFlags, CPoint point)
     }
     //设置点击鼠标右键弹出菜单
     CMenu* pContextMenu = (is_plugin_item_clicked ? theApp.m_main_menu_plugin.GetSubMenu(0) : theApp.m_main_menu.GetSubMenu(0));
-    CPoint point1;  //定义一个用于确定光标位置的位置
-    GetCursorPos(&point1);  //获取当前光标的位置，以便使得菜单可以跟随光标
+    CPoint point1{ point };     //菜单位置取自点击位置（而不是光标）
+    ClientToScreen(&point1);
     //设置默认菜单项
     switch (theApp.m_main_wnd_data.double_click_action)
     {
@@ -2775,8 +2790,8 @@ void CTrafficMonitorDlg::OnOptions()
 void CTrafficMonitorDlg::OnOptions2()
 {
     CWnd* pParent = this;
-    if (IsTaskbarWndValid())
-        pParent = m_tBarDlg;
+    if (CTaskBarDlg* pTbar = GetMenuTaskbarWnd())
+        pParent = pTbar;
     _OnOptions(1, pParent);
 }
 
@@ -2827,6 +2842,7 @@ void CTrafficMonitorDlg::OnCheckUpdate()
 
 afx_msg LRESULT CTrafficMonitorDlg::OnTaskbarMenuPopedUp(WPARAM wParam, LPARAM lParam)
 {
+    m_menu_tbar = reinterpret_cast<CTaskBarDlg*>(wParam);     //remember which taskbar window opened the menu
     //设置“选择连接”子菜单项中各单选项的选择状态
     SetConnectionMenuState(theApp.m_taskbar_menu.GetSubMenu(0)->GetSubMenu(0));
     SetConnectionMenuState(theApp.m_taskbar_menu_plugin.GetSubMenu(0)->GetSubMenu(0));
@@ -3099,15 +3115,16 @@ void CTrafficMonitorDlg::OnPluginDetail()
 
 void CTrafficMonitorDlg::OnPluginOptionsTaksbar()
 {
-    //判断任务栏窗口中点击的项目是否是插件项目
-    if (IsTaskbarWndValid() && m_tBarDlg->GetClickedItem().IsPlugin())
+    //判断任务栏窗口中点击的项目是否是插件项目（作用于弹出菜单的那个任务栏窗口）
+    CTaskBarDlg* pTbar = GetMenuTaskbarWnd();
+    if (pTbar != nullptr && pTbar->GetClickedItem().IsPlugin())
     {
         //找到对应的插件
-        ITMPlugin* plugin = theApp.m_plugins.GetPluginByItem(m_tBarDlg->GetClickedItem().PluginItem());
+        ITMPlugin* plugin = theApp.m_plugins.GetPluginByItem(pTbar->GetClickedItem().PluginItem());
         if (plugin != nullptr)
         {
             //显示插件的选项设置
-            auto rtn = plugin->ShowOptionsDialog(m_tBarDlg->GetSafeHwnd());
+            auto rtn = plugin->ShowOptionsDialog(pTbar->GetSafeHwnd());
             if (rtn == ITMPlugin::OR_OPTION_CHANGED)    //选项设置有更改，重新打开任务栏窗口
             {
                 //CloseTaskBarWnd();
@@ -3115,7 +3132,7 @@ void CTrafficMonitorDlg::OnPluginOptionsTaksbar()
                 ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
             }
             if (rtn == ITMPlugin::OR_OPTION_NOT_PROVIDED)
-                MessageBox(CCommon::LoadText(IDS_PLUGIN_NO_OPTIONS_INFO), nullptr, MB_ICONINFORMATION | MB_OK);
+                pTbar->MessageBox(CCommon::LoadText(IDS_PLUGIN_NO_OPTIONS_INFO), nullptr, MB_ICONINFORMATION | MB_OK);
         }
     }
 }
@@ -3123,14 +3140,15 @@ void CTrafficMonitorDlg::OnPluginOptionsTaksbar()
 
 void CTrafficMonitorDlg::OnPluginDetailTaksbar()
 {
-    if (IsTaskbarWndValid() && m_tBarDlg->GetClickedItem().IsPlugin())
+    CTaskBarDlg* pTbar = GetMenuTaskbarWnd();
+    if (pTbar != nullptr && pTbar->GetClickedItem().IsPlugin())
     {
         //找到对应的插件
-        ITMPlugin* plugin = theApp.m_plugins.GetPluginByItem(m_tBarDlg->GetClickedItem().PluginItem());
+        ITMPlugin* plugin = theApp.m_plugins.GetPluginByItem(pTbar->GetClickedItem().PluginItem());
         if (plugin != nullptr)
         {
             int index = theApp.m_plugins.GetPluginIndex(plugin);
-            CPluginInfoDlg dlg(index);
+            CPluginInfoDlg dlg(index, pTbar);
             dlg.DoModal();
         }
     }

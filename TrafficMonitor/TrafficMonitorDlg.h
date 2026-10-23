@@ -57,6 +57,7 @@ protected:
     HICON m_hIcon;
     NOTIFYICONDATA m_ntIcon;    //通知区域图标
     CTaskBarDlg* m_tBarDlg{};     //任务栏窗口的指针
+    CTaskBarDlg* m_menu_tbar{};     //last taskbar window whose right-click menu was opened (menu commands act on it)
     std::vector<CTaskBarDlg*> m_extraTBarDlgs;  //“在所有任务栏上显示”时，副显示器任务栏上的任务栏窗口（m_tBarDlg 位于主任务栏）
 
     vector<NetWorkConection> m_connections; //保存获取到的要显示到“选择网卡”菜单项中的所有网络连接
@@ -193,6 +194,7 @@ protected:
 
 public:
     bool IsTaskbarWndValid() const;
+    CTaskBarDlg* GetMenuTaskbarWnd() const;     //taskbar window that opened the menu in use; falls back to m_tBarDlg
 protected:
 
     void TaskbarShowHideItem(DisplayItem type);

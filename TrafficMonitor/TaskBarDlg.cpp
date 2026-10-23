@@ -1106,8 +1106,8 @@ void CTaskBarDlg::OnRButtonUp(UINT nFlags, CPoint point)
         }
     }
 
-    CPoint point1;  //定义一个用于确定光标位置的位置
-    GetCursorPos(&point1);  //获取当前光标的位置，以便使得菜单可以跟随光标
+    CPoint point1{ point };     //菜单位置取自点击位置（而不是光标），这样菜单总是出现在被点击的任务栏窗口所在的屏幕
+    ClientToScreen(&point1);
     CMenu* pMenu = (is_plugin_item_clicked ? theApp.m_taskbar_menu_plugin.GetSubMenu(0) : theApp.m_taskbar_menu.GetSubMenu(0));
     if (pMenu != nullptr)
     {
@@ -1177,7 +1177,7 @@ void CTaskBarDlg::OnInitMenu(CMenu* pMenu)
         }
     }
 
-    ::SendMessage(theApp.m_pMainWnd->GetSafeHwnd(), WM_TASKBAR_MENU_POPED_UP, 0, 0); //通知主窗口菜单已弹出
+    ::SendMessage(theApp.m_pMainWnd->GetSafeHwnd(), WM_TASKBAR_MENU_POPED_UP, (WPARAM)this, 0); //通知主窗口菜单已弹出
 }
 
 BOOL CTaskBarDlg::PreTranslateMessage(MSG* pMsg)
