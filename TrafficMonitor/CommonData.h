@@ -311,6 +311,7 @@ struct TaskBarSettingData : public PublicSettingData
 
     bool show_taskbar_wnd_in_secondary_display{ false };    //是否在副显示器上显示任务栏窗口
     int secondary_display_index{};      //在第几个副显示器上显示任务栏窗口
+    bool show_on_all_taskbars{ false }; //是否在所有显示器的任务栏上都显示任务栏窗口（主任务栏 + 每个副任务栏）
     bool value_right_align{ false };    //数值是否右对齐
     int digits_number{ 4 };             //数据位数
     bool horizontal_arrange{ true };    //水平排列

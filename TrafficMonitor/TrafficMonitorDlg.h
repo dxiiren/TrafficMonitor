@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include <functional>
 #pragma comment (lib, "iphlpapi.lib")
 
 #include "NetworkInfoDlg.h"
@@ -56,6 +57,7 @@ protected:
     HICON m_hIcon;
     NOTIFYICONDATA m_ntIcon;    //通知区域图标
     CTaskBarDlg* m_tBarDlg{};     //任务栏窗口的指针
+    std::vector<CTaskBarDlg*> m_extraTBarDlgs;  //“在所有任务栏上显示”时，副显示器任务栏上的任务栏窗口（m_tBarDlg 位于主任务栏）
 
     vector<NetWorkConection> m_connections; //保存获取到的要显示到“选择网卡”菜单项中的所有网络连接
     MIB_IFTABLE* m_pIfTable;
@@ -163,6 +165,9 @@ protected:
 
     void CloseTaskBarWnd(); //关闭任务栏窗口
     void OpenTaskBarWnd();  //打开任务栏窗口
+    CTaskBarDlg* CreateTaskBarWnd(HWND target_taskbar);   //创建一个任务栏窗口，target_taskbar为空则按设置选择任务栏
+    void ForEachTaskbarWnd(const std::function<void(CTaskBarDlg*)>& fn);    //对所有有效的任务栏窗口（含 m_extraTBarDlgs）执行操作
+    void ScheduleReopenTaskbarWnd();    //延迟一小段时间后重启任务栏窗口
 
     void AddNotifyIcon();       //添加通知区图标
     void DeleteNotifyIcon();

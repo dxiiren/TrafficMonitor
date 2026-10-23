@@ -148,6 +148,8 @@ protected:
     int m_error_code{};
     bool m_menu_popuped{ false };               //指示当前是否有菜单处于弹出状态
     bool m_is_secondary_display{ false };       //是否显示在副显示器中
+    HWND m_target_taskbar{};                    //如果不为空，则固定嵌入到此任务栏（用于“在所有任务栏上显示”）
+    bool m_last_taskbar_on_top_or_bottom{ false };
     bool m_is_width_changed{ false };
 
     UINT m_taskbar_dpi{};//TaskBarDlg自身专用dpi
@@ -191,6 +193,9 @@ public:
     void SetTextFont();
     void ApplySettings();
     void CalculateWindowSize();		//计算窗口每部分的大小，及各个部分的宽度。窗口大小保存到m_window_width和m_window_height中，各部分宽度保存到m_item_widths中，各部分的矩形区域保存到m_item_rects中
+
+    //指定本窗口要嵌入的任务栏（Shell_TrayWnd 或 Shell_SecondaryTrayWnd），必须在 Create 之前调用
+    void SetTargetTaskbar(HWND hTaskbar) { m_target_taskbar = hTaskbar; }
 
     void SetToolTipsTopMost();			//设置鼠标提示置顶
     void UpdateToolTips();

@@ -470,12 +470,11 @@ bool CTaskBarDlg::AdjustWindowPos(bool force_adjust)
 
     ::GetWindowRect(m_hTaskbar, m_rcTaskbar);   //获得任务栏的矩形区域
 
-    static bool last_taskbar_on_top_or_bottom;
     CheckTaskbarOnTopOrBottom();
-    if (force_adjust || m_taskbar_on_top_or_bottom != last_taskbar_on_top_or_bottom)
+    if (force_adjust || m_taskbar_on_top_or_bottom != m_last_taskbar_on_top_or_bottom)
     {
         CalculateWindowSize();
-        last_taskbar_on_top_or_bottom = m_taskbar_on_top_or_bottom;
+        m_last_taskbar_on_top_or_bottom = m_taskbar_on_top_or_bottom;
         force_adjust = true;
     }
 
@@ -606,6 +605,17 @@ HWND CTaskBarDlg::FindTaskbarHandle(bool& is_scendary_display)
 {
     is_scendary_display = false;
     HWND hTaskbar = nullptr;
+    //已指定了要嵌入的任务栏
+    if (m_target_taskbar != nullptr && ::IsWindow(m_target_taskbar))
+    {
+        TCHAR class_name[64]{};
+        ::GetClassName(m_target_taskbar, class_name, 64);
+        is_scendary_display = (_tcscmp(class_name, _T("Shell_SecondaryTrayWnd")) == 0);
+        return m_target_taskbar;
+    }
+    //在所有任务栏上显示时，未指定任务栏的窗口固定使用主任务栏
+    if (theApp.m_taskbar_data.show_on_all_taskbars)
+        return ::FindWindow(_T("Shell_TrayWnd"), NULL);
     //显示在副显示器上
     if (theApp.m_taskbar_data.show_taskbar_wnd_in_secondary_display && CWindowsSettingHelper::IsTaskbarShowingInAllDisplays())
     {

@@ -41,6 +41,9 @@ CTrafficMonitorDlg::~CTrafficMonitorDlg()
 {
     free(m_pIfTable);
 
+    for (auto* p : m_extraTBarDlgs)
+        delete p;
+    m_extraTBarDlgs.clear();
     if (m_tBarDlg != nullptr)
     {
         delete m_tBarDlg;
@@ -564,6 +567,13 @@ void CTrafficMonitorDlg::SetConnectionMenuState(CMenu* pMenu)
 
 void CTrafficMonitorDlg::CloseTaskBarWnd()
 {
+    for (auto* p : m_extraTBarDlgs)
+    {
+        if (::IsWindow(p->GetSafeHwnd()))
+            p->OnCancel();
+        delete p;
+    }
+    m_extraTBarDlgs.clear();
     if (m_tBarDlg != nullptr)
     {
         if (IsTaskbarWndValid())
@@ -578,12 +588,27 @@ void CTrafficMonitorDlg::OpenTaskBarWnd()
 {
     // 强制初始化theApp.m_is_windows11_taskbar的值
     theApp.CheckWindows11Taskbar();
+    m_tBarDlg = CreateTaskBarWnd(nullptr);
+    //在所有任务栏上显示：m_tBarDlg位于主任务栏，每个副显示器任务栏各创建一个窗口
+    if (theApp.m_taskbar_data.show_on_all_taskbars)
+    {
+        std::vector<HWND> secondary_taskbars;
+        CTaskbarHelper::GetAllSecondaryDisplayTaskbar(secondary_taskbars);
+        for (HWND hTaskbar : secondary_taskbars)
+            m_extraTBarDlgs.push_back(CreateTaskBarWnd(hTaskbar));
+    }
+}
+
+CTaskBarDlg* CTrafficMonitorDlg::CreateTaskBarWnd(HWND target_taskbar)
+{
+    CTaskBarDlg* pDlg{};
     if (theApp.m_win_version.IsWine())
-        m_tBarDlg = new CWineTaskbarDlg();
+        pDlg = new CWineTaskbarDlg();
     else if (theApp.IsWindows11Taskbar())
-        m_tBarDlg = new CWin11TaskbarDlg();
+        pDlg = new CWin11TaskbarDlg();
     else
-        m_tBarDlg = new CClassicalTaskbarDlg();
+        pDlg = new CClassicalTaskbarDlg();
+    pDlg->SetTargetTaskbar(target_taskbar);
 
     CSupportedRenderEnums supported_render_enums{};
     CTaskBarDlg::DisableRenderFeatureIfNecessary(supported_render_enums);
@@ -595,16 +620,35 @@ void CTrafficMonitorDlg::OpenTaskBarWnd()
     {
         using namespace DrawCommonHelper;
     case RenderType::D2D1_WITH_DCOMPOSITION:
-        m_tBarDlg->Create(IDD_TASK_BAR_DIALOG_NOREDIRECTIONBITMAP, this);
+        pDlg->Create(IDD_TASK_BAR_DIALOG_NOREDIRECTIONBITMAP, this);
         break;
     // 包括RenderType::D2D1在内的其他值
     default:
-        m_tBarDlg->Create(IDD_TASK_BAR_DIALOG, this);
+        pDlg->Create(IDD_TASK_BAR_DIALOG, this);
         break;
     }
-    m_tBarDlg->ShowWindow(SW_SHOW);
-    //m_tBarDlg->ShowInfo();
-    //IniTaskBarConnectionMenu();
+    pDlg->ShowWindow(SW_SHOW);
+    return pDlg;
+}
+
+void CTrafficMonitorDlg::ForEachTaskbarWnd(const std::function<void(CTaskBarDlg*)>& fn)
+{
+    if (IsTaskbarWndValid())
+        fn(m_tBarDlg);
+    for (auto* p : m_extraTBarDlgs)
+    {
+        if (::IsWindow(p->GetSafeHwnd()))
+            fn(p);
+    }
+}
+
+void CTrafficMonitorDlg::ScheduleReopenTaskbarWnd()
+{
+    KillTimer(RESTART_TASKBAR_TIMER);
+    SetTimer(RESTART_TASKBAR_TIMER, 500, [](HWND, UINT, UINT_PTR, DWORD) {
+        theApp.m_pMainWnd->SendMessage(WM_REOPEN_TASKBAR_WND);
+        ::KillTimer(theApp.m_pMainWnd->GetSafeHwnd(), RESTART_TASKBAR_TIMER);
+    });
 }
 
 void CTrafficMonitorDlg::AddNotifyIcon()
@@ -782,6 +826,7 @@ void CTrafficMonitorDlg::ApplySettings(COptionsDlg& optionsDlg)
     bool d2d_turned_on = (theApp.m_taskbar_data.disable_d2d && !optionsDlg.m_tab2_dlg.m_data.disable_d2d);
     //需要重新关闭再打开任务栏窗口的情况
     bool taskbar_changed = (theApp.m_taskbar_data.show_taskbar_wnd_in_secondary_display != optionsDlg.m_tab2_dlg.m_data.show_taskbar_wnd_in_secondary_display
+        || theApp.m_taskbar_data.show_on_all_taskbars != optionsDlg.m_tab2_dlg.m_data.show_on_all_taskbars
         || theApp.m_taskbar_data.secondary_display_index != optionsDlg.m_tab2_dlg.m_data.secondary_display_index
         || theApp.m_taskbar_data.disable_d2d != optionsDlg.m_tab2_dlg.m_data.disable_d2d
         || theApp.m_taskbar_data.IsTaskbarTransparent() != optionsDlg.m_tab2_dlg.m_data.IsTaskbarTransparent()
@@ -808,7 +853,7 @@ void CTrafficMonitorDlg::ApplySettings(COptionsDlg& optionsDlg)
     //CTaskBarDlg::SaveConfig();
     if (IsTaskbarWndValid())
     {
-        m_tBarDlg->ApplySettings();
+        ForEachTaskbarWnd([](CTaskBarDlg* p) { p->ApplySettings(); });
         //如果更改了任务栏窗口字体或显示的文本，则任务栏窗口可能要变化，于是关闭再打开任务栏窗口
         if (taskbar_changed)
         {
@@ -817,9 +862,9 @@ void CTrafficMonitorDlg::ApplySettings(COptionsDlg& optionsDlg)
         }
         else
         {
-            m_tBarDlg->WidthChanged();
+            ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
         }
-        m_tBarDlg->ApplyWindowTransparentColor();
+        ForEachTaskbarWnd([](CTaskBarDlg* p) { p->ApplyWindowTransparentColor(); });
     }
 
     if (optionsDlg.m_tab3_dlg.IsAutoRunModified())
@@ -990,7 +1035,7 @@ void CTrafficMonitorDlg::TaskbarShowHideItem(DisplayItem type)
         }
         //CloseTaskBarWnd();
         //OpenTaskBarWnd();
-        m_tBarDlg->WidthChanged();
+        ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
     }
 }
 
@@ -1865,7 +1910,7 @@ void CTrafficMonitorDlg::OnTimer(UINT_PTR nIDEvent)
             }
             if (restart_taskbar_dlg && IsTaskbarWndValid())
             {
-                m_tBarDlg->ApplyWindowTransparentColor();
+                ForEachTaskbarWnd([](CTaskBarDlg* p) { p->ApplyWindowTransparentColor(); });
                 //CloseTaskBarWnd();
                 //OpenTaskBarWnd();
 
@@ -1948,7 +1993,7 @@ void CTrafficMonitorDlg::OnTimer(UINT_PTR nIDEvent)
                 theApp.m_taskbar_data.back_color = color;
                 theApp.m_taskbar_data.SetTaskabrTransparent(is_taskbar_transparent);
                 if (is_taskbar_transparent)
-                    m_tBarDlg->ApplyWindowTransparentColor();
+                    ForEachTaskbarWnd([](CTaskBarDlg* p) { p->ApplyWindowTransparentColor(); });
             }
         }
 
@@ -1984,7 +2029,8 @@ void CTrafficMonitorDlg::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == TASKBAR_TIMER)
     {
         ++m_taskbar_timer_cnt;
-        if (m_taskbar_timer_cnt % 5 == 0 && theApp.m_cfg_data.m_show_task_bar_wnd && theApp.m_taskbar_data.show_taskbar_wnd_in_secondary_display)
+        if (m_taskbar_timer_cnt % 5 == 0 && theApp.m_cfg_data.m_show_task_bar_wnd
+            && (theApp.m_taskbar_data.show_taskbar_wnd_in_secondary_display || theApp.m_taskbar_data.show_on_all_taskbars))
         {
             static int last_taskbar_num = 0;
             int taskbar_num = CTaskbarHelper::GetSecondaryTaskbarNum();
@@ -1993,11 +2039,7 @@ void CTrafficMonitorDlg::OnTimer(UINT_PTR nIDEvent)
             {
                 last_taskbar_num = taskbar_num;
                 //延迟一段时间后重启任务栏窗口
-                KillTimer(RESTART_TASKBAR_TIMER);
-                SetTimer(RESTART_TASKBAR_TIMER, 500, [](HWND, UINT, UINT_PTR, DWORD) {
-                    theApp.m_pMainWnd->SendMessage(WM_REOPEN_TASKBAR_WND);
-                    ::KillTimer(theApp.m_pMainWnd->GetSafeHwnd(), RESTART_TASKBAR_TIMER);
-                });
+                ScheduleReopenTaskbarWnd();
             }
         }
 
@@ -2021,6 +2063,23 @@ void CTrafficMonitorDlg::OnTimer(UINT_PTR nIDEvent)
 
             m_tBarDlg->AdjustWindowPos();
             m_tBarDlg->Invalidate(FALSE);
+
+            //其他任务栏上的任务栏窗口：各自检查所在屏幕的DPI，调整位置并重绘
+            for (auto* p : m_extraTBarDlgs)
+            {
+                if (!::IsWindow(p->GetSafeHwnd()))
+                    continue;
+                UINT extra_dpi_x, extra_dpi_y;
+                if (m_taskbar_timer_cnt % 10 == 0 && theApp.m_win_version.IsWindows8Point1OrLater()
+                    && theApp.DPIFromRect(p->GetRectForDpiCheck(), &extra_dpi_x, &extra_dpi_y) && extra_dpi_x != p->GetDPI())
+                {
+                    p->SetDPI(extra_dpi_x);
+                    p->SetTextFont();
+                    p->CalculateWindowSize();
+                }
+                p->AdjustWindowPos();
+                p->Invalidate(FALSE);
+            }
         }
     }
 
@@ -2133,8 +2192,7 @@ void CTrafficMonitorDlg::OnNetworkInfo()
     aDlg.m_start_time = m_start_time;
     aDlg.DoModal();
     //SetAlwaysOnTop(); //由于在“连接详情”对话框内设置了取消窗口置顶，所有在对话框关闭后，重新设置窗口置顶
-    if (m_tBarDlg != nullptr)
-        m_tBarDlg->m_tool_tips.SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE);  //重新设置任务栏窗口的提示信息置顶
+    ForEachTaskbarWnd([](CTaskBarDlg* p) { p->m_tool_tips.SetWindowPos(&wndTopMost, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE); });  //重新设置任务栏窗口的提示信息置顶
 }
 
 
@@ -2193,8 +2251,7 @@ void CTrafficMonitorDlg::OnClose()
     SaveHistoryTrafficFull();  // 退出时使用完整保存，确保所有数据都保存
     BackupHistoryTrafficFile();
 
-    if (IsTaskbarWndValid())
-        m_tBarDlg->OnCancel();
+    ForEachTaskbarWnd([](CTaskBarDlg* p) { p->OnCancel(); });
 
     //确保在退出前关闭所有窗口
     for (const auto& item : CBaseDialog::AllUniqueHandels())
@@ -2524,7 +2581,7 @@ void CTrafficMonitorDlg::OnShowCpuMemory2()
         //切换显示CPU和内存利用率时，删除任务栏窗口，再重新显示
         //CloseTaskBarWnd();
         //OpenTaskBarWnd();
-        m_tBarDlg->WidthChanged();
+        ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
     }
 }
 
@@ -2796,7 +2853,7 @@ void CTrafficMonitorDlg::OnShowNetSpeed()
         }
         //CloseTaskBarWnd();
         //OpenTaskBarWnd();
-        m_tBarDlg->WidthChanged();
+        ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
     }
 }
 
@@ -2853,9 +2910,11 @@ afx_msg LRESULT CTrafficMonitorDlg::OnDpichanged(WPARAM wParam, LPARAM lParam)
         if (pThis->IsTaskbarWndValid() && !theApp.m_win_version.IsWindows8Point1OrLater())
         {
             //为任务栏窗口重新指定DPI
-            pThis->m_tBarDlg->SetDPI(dpi);
-            //根据新的DPI重新设置任务栏窗口字体
-            pThis->m_tBarDlg->SetTextFont();
+            pThis->ForEachTaskbarWnd([](CTaskBarDlg* p) {
+                p->SetDPI(dpi);
+                //根据新的DPI重新设置任务栏窗口字体
+                p->SetTextFont();
+            });
         }
 
         pThis->LoadSkinLayout();   //根据当前选择的皮肤获取布局数据
@@ -2897,8 +2956,7 @@ afx_msg LRESULT CTrafficMonitorDlg::OnMonitorInfoUpdated(WPARAM wParam, LPARAM l
         m_tool_tips.UpdateTipText(tip_info, this);
     }
     //更新任务栏窗口鼠标提示
-    if (IsTaskbarWndValid())
-        m_tBarDlg->UpdateToolTips();
+    ForEachTaskbarWnd([](CTaskBarDlg* p) { p->UpdateToolTips(); });
     return 0;
 }
 
@@ -2907,6 +2965,9 @@ LRESULT CTrafficMonitorDlg::OnDisplaychange(WPARAM wParam, LPARAM lParam)
 {
     GetScreenSize();
     CheckWindowPos(true);
+    //显示器插拔后，重新枚举任务栏并重启任务栏窗口
+    if (theApp.m_cfg_data.m_show_task_bar_wnd && theApp.m_taskbar_data.show_on_all_taskbars)
+        ScheduleReopenTaskbarWnd();
     return 0;
 }
 
@@ -2967,7 +3028,7 @@ void CTrafficMonitorDlg::OnDisplaySettings()
         //CloseTaskBarWnd();
         //OpenTaskBarWnd();
         if (IsTaskbarWndValid())
-            m_tBarDlg->WidthChanged();
+            ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
     }
 }
 
@@ -3051,7 +3112,7 @@ void CTrafficMonitorDlg::OnPluginOptionsTaksbar()
             {
                 //CloseTaskBarWnd();
                 //OpenTaskBarWnd();
-                m_tBarDlg->WidthChanged();
+                ForEachTaskbarWnd([](CTaskBarDlg* p) { p->WidthChanged(); });
             }
             if (rtn == ITMPlugin::OR_OPTION_NOT_PROVIDED)
                 MessageBox(CCommon::LoadText(IDS_PLUGIN_NO_OPTIONS_INFO), nullptr, MB_ICONINFORMATION | MB_OK);
