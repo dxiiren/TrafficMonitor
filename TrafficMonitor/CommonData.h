@@ -194,6 +194,7 @@ struct MainConfigData
 
     int m_position_x;   //窗口位置的x坐标
     int m_position_y;   //窗口位置的y坐标
+    int m_window_scale{ 100 };  //悬浮窗缩放比例（百分比，50~400）
 
     bool m_auto_select{ false };    //自动选择连接
     bool m_select_all{ false };     //统计所有连接的网速

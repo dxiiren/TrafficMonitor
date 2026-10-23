@@ -94,6 +94,7 @@ public:
     CMenu m_main_menu;          //主窗口右键菜单
     CMenu m_main_menu_plugin;   //右击主窗口插件区域的右键菜单
     CMenu m_main_menu_plugin_sub_menu;
+    CMenu m_window_scale_menu;      //悬浮窗“大小”子菜单
     CMenu m_taskbar_menu;       //任务栏窗口右键菜单
     CMenu m_taskbar_menu_plugin;    //右击任务栏窗口插件区域的右键菜单
     CMenu m_taskbar_menu_plugin_sub_menu;

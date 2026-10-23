@@ -113,7 +113,7 @@ public:
     void DrawPreview(CDC* pDC, CRect rect);
 
     //绘制主界面
-    void DrawInfo(CDC* pDC, bool show_more_info);
+    void DrawInfo(CDC* pDC, bool show_more_info, int scale_percent = 100);
 
     static string GetDisplayItemXmlNodeName(DisplayItem display_item);
 

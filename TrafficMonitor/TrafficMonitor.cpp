@@ -101,6 +101,7 @@ void CTrafficMonitorApp::LoadConfig()
     m_cfg_data.m_show_task_bar_wnd = ini.GetBool(_T("config"), _T("show_task_bar_wnd"), false);
     m_cfg_data.m_position_x = ini.GetInt(_T("config"), _T("position_x"), -1);
     m_cfg_data.m_position_y = ini.GetInt(_T("config"), _T("position_y"), -1);
+    m_cfg_data.m_window_scale = max(50, min(400, ini.GetInt(_T("config"), _T("window_scale"), 100)));
     m_cfg_data.m_auto_select = ini.GetBool(_T("connection"), _T("auto_select"), true);
     m_cfg_data.m_select_all = ini.GetBool(_T("connection"), _T("select_all"), false);
     m_cfg_data.m_hide_main_window = ini.GetBool(_T("config"), _T("hide_main_window"), false);
@@ -316,6 +317,7 @@ void CTrafficMonitorApp::SaveConfig()
     ini.WriteBool(L"config", L"show_task_bar_wnd", m_cfg_data.m_show_task_bar_wnd);
     ini.WriteInt(L"config", L"position_x", m_cfg_data.m_position_x);
     ini.WriteInt(L"config", L"position_y", m_cfg_data.m_position_y);
+    ini.WriteInt(L"config", L"window_scale", m_cfg_data.m_window_scale);
     ini.WriteBool(L"connection", L"auto_select", m_cfg_data.m_auto_select);
     ini.WriteBool(L"connection", L"select_all", m_cfg_data.m_select_all);
     //ini.SaveMainWndColors(L"config", L"text_color", m_main_wnd_data.text_colors);
@@ -843,6 +845,26 @@ void CTrafficMonitorApp::InitMenuResourse()
     //主窗口右键菜单
     addIconsForMainWindowMenu(m_main_menu);
     addIconsForMainWindowMenu(m_main_menu_plugin);
+    //悬浮窗“大小”子菜单（预设缩放比例），插入到“退出”之前
+    m_window_scale_menu.CreatePopupMenu();
+    {
+        const int presets[] = { 75, 100, 125, 150, 200, 300 };
+        for (int i = 0; i < 6; i++)
+        {
+            CString text;
+            text.Format(_T("%d%%"), presets[i]);
+            m_window_scale_menu.AppendMenu(MF_STRING | MF_ENABLED, ID_WINDOW_SCALE_FIRST + i, text);
+        }
+    }
+    for (CMenu* menu : { &m_main_menu, &m_main_menu_plugin })
+    {
+        CMenu* sub = menu->GetSubMenu(0);
+        int count = sub->GetMenuItemCount();
+        int exit_pos = count;
+        for (int i = 0; i < count; i++)
+            if (sub->GetMenuItemID(i) == ID_APP_EXIT) { exit_pos = i; break; }
+        sub->InsertMenu(exit_pos, MF_BYPOSITION | MF_POPUP | MF_STRING, (UINT_PTR)m_window_scale_menu.m_hMenu, _T("Size (resize window)"));
+    }
 
     //任务栏窗口右键菜单
     auto addIconsForTaksbarWindowMenu = [&](const CMenu& menu)
