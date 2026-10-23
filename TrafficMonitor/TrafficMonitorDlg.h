@@ -294,6 +294,7 @@ public:
     afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
     afx_msg LRESULT OnNcHitTest(CPoint point);
     afx_msg void OnNcLButtonDown(UINT nHitTest, CPoint point);
+    afx_msg void OnNcRButtonUp(UINT nHitTest, CPoint point);
     afx_msg void OnCaptureChanged(CWnd* pWnd);
     afx_msg void OnWindowScaleCommand(UINT nID);
     afx_msg void OnRefreshConnectionList();
